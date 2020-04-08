@@ -5,9 +5,12 @@ import ecdsa
 import hashlib
 import base58
 import binascii
-import json
 import redis
 import logging
+import config
+from time import time
+import sys
+from functools import wraps
 
 # Logging
 logger = logging.getLogger('brt')
@@ -22,12 +25,23 @@ ch.setFormatter(formatter)
 logger.addHandler(ch)
 ## End Logging Setup
 
-REDIS_HOST = os.environ.get('REDIS_HOST') or '127.0.0.1'
-REDIS_PORT = os.environ.get('REDIS_PORT') or None
-REDIS_PASSWORD = os.environ.get('REDIS_PASSWORD') or None
-CHUNK_SIZE = os.environ.get('CHUNK_SIZE') or 1000
+
+r = redis.Redis(host=config.REDIS_HOST, password=config.REDIS_PASSWORD, db=0)
+r_found = redis.Redis(host=config.REDIS_HOST, password=config.REDIS_PASSWORD, db=1)
 
 
+def measure(func):
+    @wraps(func)
+    def _time_it(*args, **kwargs):
+        start = int(round(time() * 1000))
+        # start = time()
+        try:
+            return func(*args, **kwargs)
+        finally:
+            end_ = int(round(time() * 1000)) - start
+            # end_ = time() - start
+            logger.debug(f"{func.__name__}: {end_ if end_ > 0 else 0} ms")
+    return _time_it
 
 # def generate_wif_key(private_key):
 # 	padding = b'80'
@@ -40,8 +54,9 @@ CHUNK_SIZE = os.environ.get('CHUNK_SIZE') or 1000
 
 # 	return wif
 
-
+@measure
 def generate_wallets(chunk_size=20000):
+    logger.info(f'Generating {config.CHUNK_SIZE} wallets...')
     chunk = dict()
     for i in range(chunk_size):
         private_key = os.urandom(32)
@@ -79,27 +94,35 @@ def found_match(public_address: str, wallet: dict, balance: int):
     r_found.hmset(public_address, wallet)
     return True
 
-r = redis.Redis(host=REDIS_HOST, password=REDIS_PASSWORD, db=0)
-r_found = redis.Redis(host=REDIS_HOST, password=REDIS_PASSWORD, db=1)
-
-while True:
-    logger.info(f'Generating {CHUNK_SIZE} wallets...')
-    wallets = generate_wallets(chunk_size=CHUNK_SIZE)
-    # wallets = {
-    #     '3M6UcBNGZAW1HRjiFDMRcY5aXFrQ4F9E1y': {
-    #         'private_key': 'd12c20802c08d85140a933224d536fd22ceac59174ac2a159bbbfd0e3ceaf2fd',
-    #         'public_key': '0457c4c00b56d57cfa4f2a476d40ede96a2188297721606cfaed515ae374e34d47a8657fff018b02212dc1b0db0a6ed1d3a93c69ccdeef335d93e8a9e6df09aa2b'
-    #     }
-    # }
-
-    addresses = list(wallets.keys()) #dict key is the public address
+@measure
+def query_redis(r, addresses):
     logger.info('Querying redis...')
     response = r.mget(addresses)
     logger.info('Redis query finished')
 
-    for idx,balance in enumerate(response):
-        if balance != None:
-            _ = found_match(addresses[idx], wallets[addresses[idx]], balance)
+    return response
+
+@measure
+def work():
+        wallets = generate_wallets(chunk_size=config.CHUNK_SIZE)
+
+        addresses = list(wallets.keys()) #dict key is the public address
+        
+        response = query_redis(r, addresses)
+        
+        for idx,balance in enumerate(response):
+            if balance != None:
+                _ = found_match(addresses[idx], wallets[addresses[idx]], balance)
+
+def main():
+    while True:
+        work()
+
+if __name__ == '__main__':
+    if '-v' in sys.argv:
+        logger.setLevel(logging.DEBUG)
+        ch.setLevel(logging.DEBUG)
+    main()
 
 #FIXME: We need compressed addresses for all new transactions. Used compress public address for checking transactions
 #FIXME: Use WIF to store private key for less bytes
