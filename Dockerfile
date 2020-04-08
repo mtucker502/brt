@@ -38,4 +38,4 @@ COPY worker.py .
 
 RUN chmod +x worker.py
 
-ENTRYPOINT [ "python", "worker.py" ]
+CMD [ "python", "worker.py" ]
