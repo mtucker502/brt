@@ -23,8 +23,9 @@ logger.addHandler(ch)
 ## End Logging Setup
 
 REDIS_HOST = os.environ.get('REDIS_HOST') or '127.0.0.1'
+REDIS_PORT = os.environ.get('REDIS_PORT') or None
 REDIS_PASSWORD = os.environ.get('REDIS_PASSWORD') or None
-chunk_size = os.environ.get('REDIS_PASSWORD') or 1000
+CHUNK_SIZE = os.environ.get('CHUNK_SIZE') or 1000
 
 
 
@@ -82,8 +83,8 @@ r = redis.Redis(host=REDIS_HOST, password=REDIS_PASSWORD, db=0)
 r_found = redis.Redis(host=REDIS_HOST, password=REDIS_PASSWORD, db=1)
 
 while True:
-    logger.info(f'Generating {chunk_size} wallets...')
-    wallets = generate_wallets(chunk_size=chunk_size)
+    logger.info(f'Generating {CHUNK_SIZE} wallets...')
+    wallets = generate_wallets(chunk_size=CHUNK_SIZE)
     # wallets = {
     #     '3M6UcBNGZAW1HRjiFDMRcY5aXFrQ4F9E1y': {
     #         'private_key': 'd12c20802c08d85140a933224d536fd22ceac59174ac2a159bbbfd0e3ceaf2fd',
@@ -93,7 +94,7 @@ while True:
 
     addresses = list(wallets.keys()) #dict key is the public address
     logger.info('Querying redis...')
-    response = r.mget(addresses) 
+    response = r.mget(addresses)
     logger.info('Redis query finished')
 
     for idx,balance in enumerate(response):
