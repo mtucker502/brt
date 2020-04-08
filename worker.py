@@ -24,6 +24,7 @@ logger.addHandler(ch)
 
 REDIS_HOST = os.environ.get('REDIS_HOST') or '127.0.0.1'
 REDIS_PASSWORD = os.environ.get('REDIS_PASSWORD') or None
+chunk_size = os.environ.get('REDIS_PASSWORD') or 1000
 
 
 
@@ -77,7 +78,6 @@ def found_match(public_address: str, wallet: dict, balance: int):
     r_found.hmset(public_address, wallet)
     return True
 
-chunk_size = 1000
 r = redis.Redis(host=REDIS_HOST, password=REDIS_PASSWORD, db=0)
 r_found = redis.Redis(host=REDIS_HOST, password=REDIS_PASSWORD, db=1)
 
